@@ -15,79 +15,8 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.blue[100],
-      body: Column(
-        children: [
-          /// 1) 로고
-          Expanded(
-            child: _Logo(),
-          ),
-
-          /// 2) 이미지
-          Expanded(
-            child: _Image(),
-          ),
-
-          /// 3) 버튼
-          Expanded(
-            child: _Footer(),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Logo extends StatelessWidget {
-  const _Logo();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.blue,
-          borderRadius: BorderRadius.circular(16.0),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.blue[300]!,
-              blurRadius: 12.0,
-              spreadRadius: 2.0,
-            ),
-          ],
-        ),
-        child: Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.videocam,
-                color: Colors.white,
-              ),
-              SizedBox(width: 12.0),
-              Text(
-                'LIVE',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 30.0,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Image extends StatelessWidget {
-  const _Image();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Image.asset(
-        'asset/img/home_img.png',
+      body: Center(
+        child: _Footer(),
       ),
     );
   }
@@ -207,6 +136,7 @@ class _FooterState extends State<_Footer> {
     setState(() {
       _isCheckingRoom = true;
       _roomExists = null;
+      _participantCount = 0;
     });
 
     try {
@@ -330,10 +260,12 @@ class _FooterState extends State<_Footer> {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
+    return SingleChildScrollView(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          SizedBox(height: 40),
+
           // 주인장 상태 표시
           if (_isHost) ...[
             Container(
@@ -346,7 +278,8 @@ class _FooterState extends State<_Footer> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.workspace_premium, color: Colors.yellow[700], size: 20),
+                  Icon(Icons.workspace_premium,
+                      color: Colors.yellow[700], size: 20),
                   SizedBox(width: 8),
                   Text(
                     '주인장 권한 보유',
@@ -384,7 +317,7 @@ class _FooterState extends State<_Footer> {
               },
               child: Text('권한 해제', style: TextStyle(color: Colors.red)),
             ),
-            SizedBox(height: 16),
+            SizedBox(height: 20),
           ],
 
           // 방 상태 정보 표시
@@ -445,7 +378,7 @@ class _FooterState extends State<_Footer> {
                 ],
               ),
             ),
-            SizedBox(height: 16),
+            SizedBox(height: 20),
           ],
 
           // 방 상태 확인 버튼
@@ -468,7 +401,7 @@ class _FooterState extends State<_Footer> {
             ),
           ),
 
-          SizedBox(height: 12),
+          SizedBox(height: 20),
 
           // 주인장 되기 버튼 (주인장이 아닐 때만 표시)
           if (!_isHost) ...[
@@ -529,20 +462,58 @@ class _FooterState extends State<_Footer> {
                 ),
               ),
             ),
-            SizedBox(height: 12),
+            SizedBox(height: 30),
           ],
 
-          // 입장하기 버튼
-          ElevatedButton.icon(
-            onPressed: () => _requestPermissionsAndNavigate(context),
-            icon: Icon(Icons.videocam),
-            label: Text('입장하기'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
-              padding: EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+          // 입장하기 버튼 (할아버지 할머니용 - 화면 절반 크기)
+          Container(
+            width: MediaQuery.of(context).size.width * 0.9, // 화면 폭의 90%
+            height: MediaQuery.of(context).size.height * 0.3, // 화면 높이의 30%
+            margin: EdgeInsets.all(16),
+            child: ElevatedButton(
+              onPressed: () => _requestPermissionsAndNavigate(context),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red[600], // 강한 빨간색
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(30),
+                ),
+                elevation: 15,
+                shadowColor: Colors.red[300],
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.videocam,
+                    size: 80, // 매우 큰 아이콘
+                    color: Colors.white,
+                  ),
+                  SizedBox(height: 24),
+                  Text(
+                    '입장하기',
+                    style: TextStyle(
+                      fontSize: 42, // 매우 큰 글씨
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      letterSpacing: 3,
+                    ),
+                  ),
+                  SizedBox(height: 12),
+                  Text(
+                    '화상통화 시작',
+                    style: TextStyle(
+                      fontSize: 20,
+                      color: Colors.white70,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
+
+          SizedBox(height: 40),
         ],
       ),
     );
