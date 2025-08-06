@@ -140,6 +140,8 @@ class _FooterState extends State<_Footer> {
     });
 
     try {
+      print('=== 방 상태 확인 시작 ===');
+
       // 임시 엔진을 생성하여 채널 상태 확인
       RtcEngine tempEngine = createAgoraRtcEngine();
 
@@ -150,43 +152,113 @@ class _FooterState extends State<_Footer> {
       // 이벤트 핸들러를 등록하여 채널 정보 수집
       List<int> activeUsers = [];
       bool channelJoined = false;
+      bool userDetectionComplete = false;
 
       tempEngine.registerEventHandler(
         RtcEngineEventHandler(
           onJoinChannelSuccess: (connection, elapsed) {
             channelJoined = true;
             print('채널 확인용 연결 성공: ${connection.channelId}');
+
+            // 채널에 참가한 후 잠시 기다린 다음 사용자 감지 완료로 표시
+            Timer(Duration(seconds: 5), () {
+              userDetectionComplete = true;
+            });
           },
           onUserJoined: (connection, uid, elapsed) {
-            if (uid != 999999 && !activeUsers.contains(uid)) {
-              // 임시 UID 제외
+            print('사용자 감지됨: $uid');
+            if (uid != 888888 && !activeUsers.contains(uid)) {
+              // 새로운 임시 UID로 변경하고 제외
               activeUsers.add(uid);
-              print('실제 사용자 발견: $uid (총 ${activeUsers.length}명)');
+              print('실제 사용자 추가: $uid (총 ${activeUsers.length}명)');
+              // 사용자가 감지되면 즉시 감지 완료로 표시
+              userDetectionComplete = true;
+            } else {
+              print('임시 UID 또는 중복 사용자 무시: $uid');
             }
           },
           onUserOffline: (connection, uid, reason) {
             activeUsers.remove(uid);
-            print('사용자 나감: $uid (총 ${activeUsers.length}명)');
+            print('사용자 나감: $uid (총 ${activeUsers.length}명, 이유: $reason)');
           },
           onError: (err, msg) {
             print('채널 확인 오류: $err - $msg');
+            if (err == ErrorCodeType.errTokenExpired) {
+              print('⚠️ 토큰이 만료되었습니다! keys.dart에서 토큰을 갱신하세요.');
+            }
+          },
+          onRemoteAudioStateChanged: (connection, uid, state, reason, elapsed) {
+            print('원격 오디오 상태 변경: UID=$uid, State=$state');
+          },
+          onRemoteVideoStateChanged: (connection, uid, state, reason, elapsed) {
+            print('원격 비디오 상태 변경: UID=$uid, State=$state');
           },
         ),
       );
 
-      // 채널에 잠시 연결하여 정보 수집 (관찰자 모드)
+      // 비디오와 오디오 활성화 (더 나은 감지를 위해)
+      await tempEngine.enableVideo();
+      await tempEngine.enableAudio();
+
+      // 채널에 잠시 연결하여 정보 수집 (브로드캐스터 모드로 변경)
       await tempEngine.joinChannel(
-        token: token,
+        token: token ?? '',
         channelId: channelName,
-        uid: 999999, // 임시 UID
+        uid: 888888, // 새로운 임시 UID
         options: ChannelMediaOptions(
-          clientRoleType: ClientRoleType.clientRoleAudience, // 관찰자 모드
+          clientRoleType: ClientRoleType.clientRoleBroadcaster, // 브로드캐스터 모드로 변경
           channelProfile: ChannelProfileType.channelProfileCommunication,
+          publishCameraTrack: false, // 카메라는 발행하지 않음
+          publishMicrophoneTrack: false, // 마이크도 발행하지 않음
+          autoSubscribeAudio: true, // 오디오 구독
+          autoSubscribeVideo: true, // 비디오 구독
         ),
       );
 
-      // 조금 더 긴 시간 대기하여 사용자 정보 수집
-      await Future.delayed(Duration(seconds: 3));
+      // 채널 연결 직후 기존 사용자 목록을 요청
+      try {
+        if (token != null && token!.isNotEmpty) {
+          await tempEngine.renewToken(token!); // 채널 새로고침을 통해 기존 사용자 감지 개선
+          print('✅ 토큰 갱신 성공');
+        } else {
+          print('⚠️ 토큰이 없어서 갱신 건너뜀');
+        }
+      } catch (e) {
+        print('⚠️ 토큰 갱신 실패 (무시해도 됨): $e');
+      }
+
+      print('채널 참가 완료, 사용자 감지 대기 중...');
+
+      // 사용자 감지를 위해 더 긴 시간 대기
+      int waitTime = 0;
+      while (waitTime < 6 && !userDetectionComplete) {
+        await Future.delayed(Duration(seconds: 1));
+        waitTime++;
+        print('대기 중... ${waitTime}초 (현재 감지된 사용자: ${activeUsers.length}명)');
+
+        // 2초 후부터 추가 방법으로 사용자 감지 시도
+        if (waitTime == 2) {
+          try {
+            // 채널 정보 갱신 시도
+            await tempEngine.muteLocalAudioStream(true);
+            await tempEngine.muteLocalAudioStream(false);
+          } catch (e) {
+            print('추가 감지 시도 실패: $e');
+          }
+        }
+
+        // 4초 후 한번 더 시도
+        if (waitTime == 4) {
+          try {
+            await tempEngine.muteLocalVideoStream(true);
+            await tempEngine.muteLocalVideoStream(false);
+          } catch (e) {
+            print('추가 감지 시도 2 실패: $e');
+          }
+        }
+      }
+
+      print('사용자 감지 완료, 채널에서 나가는 중...');
 
       // 채널에서 나가기
       await tempEngine.leaveChannel();
@@ -201,7 +273,10 @@ class _FooterState extends State<_Footer> {
         _participantCount = realUserCount;
       });
 
-      print('방 상태 확인 완료: 채널 연결=$channelJoined, 실제 참가자=$realUserCount명');
+      print('=== 방 상태 확인 완료 ===');
+      print('채널 연결: $channelJoined');
+      print('실제 참가자: $realUserCount명');
+      print('감지된 UID 목록: $activeUsers');
     } catch (e) {
       print('방 상태 확인 오류: $e');
       setState(() {
@@ -209,6 +284,31 @@ class _FooterState extends State<_Footer> {
         _roomExists = false;
         _participantCount = 0;
       });
+
+      // 토큰 만료 오류인 경우 사용자에게 알림
+      if (e.toString().contains('errTokenExpired')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.error, color: Colors.white),
+                    SizedBox(width: 8),
+                    Text('토큰이 만료되었습니다'),
+                  ],
+                ),
+                SizedBox(height: 4),
+                Text('개발자가 토큰을 갱신해야 합니다.', style: TextStyle(fontSize: 12)),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 5),
+          ),
+        );
+      }
     }
   }
 
@@ -348,7 +448,7 @@ class _FooterState extends State<_Footer> {
                         _roomExists!
                             ? '방에 참가자가 있습니다'
                             : (_participantCount == 0
-                                ? '방이 비어있습니다'
+                                ? '방이 비어있습니다 (주인장 감지 안됨)'
                                 : '새로운 방이 생성됩니다'),
                         style: TextStyle(
                           color: _roomExists!
@@ -375,6 +475,32 @@ class _FooterState extends State<_Footer> {
                       fontSize: 12,
                     ),
                   ),
+                  if (_participantCount == 0 && _roomExists == false)
+                    Padding(
+                      padding: EdgeInsets.only(top: 4),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '💡 주인장이 방에 있다면 다시 한번 확인해보세요',
+                            style: TextStyle(
+                              color: Colors.blue[600],
+                              fontSize: 11,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            '📱 주인장이 앱을 완전히 시작했는지 확인해주세요',
+                            style: TextStyle(
+                              color: Colors.orange[600],
+                              fontSize: 10,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -394,9 +520,10 @@ class _FooterState extends State<_Footer> {
                     ),
                   )
                 : Icon(Icons.search),
-            label: Text(_isCheckingRoom ? '확인 중...' : '방 상태 확인'),
+            label: Text(_isCheckingRoom ? '확인 중... (최대 6초)' : '방 상태 확인'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.grey[600],
+              backgroundColor:
+                  _isCheckingRoom ? Colors.orange[600] : Colors.grey[600],
               foregroundColor: Colors.white,
             ),
           ),
