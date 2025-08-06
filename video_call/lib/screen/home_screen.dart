@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 import 'package:video_call/screen/cam_screen.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:agora_rtc_engine/agora_rtc_engine.dart';
+import 'package:video_call/const/keys.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -34,7 +36,7 @@ class HomeScreen extends StatelessWidget {
 }
 
 class _Logo extends StatelessWidget {
-  const _Logo({super.key});
+  const _Logo();
 
   @override
   Widget build(BuildContext context) {
@@ -77,7 +79,7 @@ class _Logo extends StatelessWidget {
 }
 
 class _Image extends StatelessWidget {
-  const _Image({super.key});
+  const _Image();
 
   @override
   Widget build(BuildContext context) {
@@ -89,8 +91,96 @@ class _Image extends StatelessWidget {
   }
 }
 
-class _Footer extends StatelessWidget {
-  const _Footer({super.key});
+class _Footer extends StatefulWidget {
+  const _Footer();
+
+  @override
+  State<_Footer> createState() => _FooterState();
+}
+
+class _FooterState extends State<_Footer> {
+  bool _isCheckingRoom = false;
+  bool? _roomExists;
+  int _participantCount = 0;
+
+  Future<void> _checkRoomStatus() async {
+    setState(() {
+      _isCheckingRoom = true;
+      _roomExists = null;
+    });
+
+    try {
+      // 임시 엔진을 생성하여 채널 상태 확인
+      RtcEngine tempEngine = createAgoraRtcEngine();
+
+      await tempEngine.initialize(
+        RtcEngineContext(appId: appId),
+      );
+
+      // 이벤트 핸들러를 등록하여 채널 정보 수집
+      List<int> activeUsers = [];
+      bool channelJoined = false;
+
+      tempEngine.registerEventHandler(
+        RtcEngineEventHandler(
+          onJoinChannelSuccess: (connection, elapsed) {
+            channelJoined = true;
+            print('채널 확인용 연결 성공: ${connection.channelId}');
+          },
+          onUserJoined: (connection, uid, elapsed) {
+            if (uid != 999999 && !activeUsers.contains(uid)) {
+              // 임시 UID 제외
+              activeUsers.add(uid);
+              print('실제 사용자 발견: $uid (총 ${activeUsers.length}명)');
+            }
+          },
+          onUserOffline: (connection, uid, reason) {
+            activeUsers.remove(uid);
+            print('사용자 나감: $uid (총 ${activeUsers.length}명)');
+          },
+          onError: (err, msg) {
+            print('채널 확인 오류: $err - $msg');
+          },
+        ),
+      );
+
+      // 채널에 잠시 연결하여 정보 수집 (관찰자 모드)
+      await tempEngine.joinChannel(
+        token: token,
+        channelId: channelName,
+        uid: 999999, // 임시 UID
+        options: ChannelMediaOptions(
+          clientRoleType: ClientRoleType.clientRoleAudience, // 관찰자 모드
+          channelProfile: ChannelProfileType.channelProfileCommunication,
+        ),
+      );
+
+      // 조금 더 긴 시간 대기하여 사용자 정보 수집
+      await Future.delayed(Duration(seconds: 3));
+
+      // 채널에서 나가기
+      await tempEngine.leaveChannel();
+      await tempEngine.release();
+
+      // 실제 활성 사용자 수 확인
+      int realUserCount = activeUsers.length;
+
+      setState(() {
+        _isCheckingRoom = false;
+        _roomExists = realUserCount > 0; // 실제 참가자가 있을 때만 활성화된 것으로 간주
+        _participantCount = realUserCount;
+      });
+
+      print('방 상태 확인 완료: 채널 연결=$channelJoined, 실제 참가자=$realUserCount명');
+    } catch (e) {
+      print('방 상태 확인 오류: $e');
+      setState(() {
+        _isCheckingRoom = false;
+        _roomExists = false;
+        _participantCount = 0;
+      });
+    }
+  }
 
   Future<void> _requestPermissionsAndNavigate(BuildContext context) async {
     try {
@@ -141,13 +231,104 @@ class _Footer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: ElevatedButton(
-        onPressed: () => _requestPermissionsAndNavigate(context),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.blue,
-          foregroundColor: Colors.white,
-        ),
-        child: Text('입장하기'),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // 방 상태 정보 표시
+          if (_roomExists != null) ...[
+            Container(
+              padding: EdgeInsets.all(16),
+              margin: EdgeInsets.symmetric(horizontal: 32),
+              decoration: BoxDecoration(
+                color: _roomExists! ? Colors.green[50] : Colors.orange[50],
+                border: Border.all(
+                  color: _roomExists! ? Colors.green : Colors.orange,
+                  width: 2,
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        _roomExists! ? Icons.check_circle : Icons.info,
+                        color: _roomExists! ? Colors.green : Colors.orange,
+                        size: 20,
+                      ),
+                      SizedBox(width: 8),
+                      Text(
+                        _roomExists!
+                            ? '방에 참가자가 있습니다'
+                            : (_participantCount == 0
+                                ? '방이 비어있습니다'
+                                : '새로운 방이 생성됩니다'),
+                        style: TextStyle(
+                          color: _roomExists!
+                              ? Colors.green[800]
+                              : Colors.orange[800],
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    '채널: $channelName',
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 12,
+                    ),
+                  ),
+                  Text(
+                    '현재 참가자: $_participantCount명',
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: 16),
+          ],
+
+          // 방 상태 확인 버튼
+          ElevatedButton.icon(
+            onPressed: _isCheckingRoom ? null : _checkRoomStatus,
+            icon: _isCheckingRoom
+                ? SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : Icon(Icons.search),
+            label: Text(_isCheckingRoom ? '확인 중...' : '방 상태 확인'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.grey[600],
+              foregroundColor: Colors.white,
+            ),
+          ),
+
+          SizedBox(height: 12),
+
+          // 입장하기 버튼
+          ElevatedButton.icon(
+            onPressed: () => _requestPermissionsAndNavigate(context),
+            icon: Icon(Icons.videocam),
+            label: Text('입장하기'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+              padding: EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+            ),
+          ),
+        ],
       ),
     );
   }

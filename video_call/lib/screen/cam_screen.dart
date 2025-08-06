@@ -25,6 +25,11 @@ class _CamScreenState extends State<CamScreen> {
   bool _isLoading = true;
   String? _errorMessage;
 
+  // 방 상태 관리
+  bool _isChannelJoined = false;
+  int _totalUserCount = 0;
+  List<int> _connectedUsers = [];
+
   @override
   void initState() {
     super.initState();
@@ -111,7 +116,7 @@ class _CamScreenState extends State<CamScreen> {
   Future<void> _initializeAgora() async {
     try {
       print('=== Agora 초기화 시작 ===');
-      
+
       if (engine == null) {
         print('Agora RTC Engine 생성 중...');
         engine = createAgoraRtcEngine();
@@ -131,12 +136,23 @@ class _CamScreenState extends State<CamScreen> {
               int elapsed,
             ) {
               print('채널 참가 성공: ${connection.channelId}, UID: $uid');
+              setState(() {
+                _isChannelJoined = true;
+                _connectedUsers.add(uid);
+                _totalUserCount = _connectedUsers.length;
+              });
             },
             onLeaveChannel: (
               RtcConnection connection,
               RtcStats stats,
             ) {
               print('채널 떠남');
+              setState(() {
+                _isChannelJoined = false;
+                _connectedUsers.clear();
+                _totalUserCount = 0;
+                remoteUid = null;
+              });
             },
             onUserJoined: (
               RtcConnection connection,
@@ -146,6 +162,10 @@ class _CamScreenState extends State<CamScreen> {
               print('원격 사용자 참가: $remoteUid');
               setState(() {
                 this.remoteUid = remoteUid;
+                if (!_connectedUsers.contains(remoteUid)) {
+                  _connectedUsers.add(remoteUid);
+                  _totalUserCount = _connectedUsers.length;
+                }
               });
             },
             onUserOffline: (
@@ -153,9 +173,11 @@ class _CamScreenState extends State<CamScreen> {
               int remoteUid,
               UserOfflineReasonType reason,
             ) {
-              print('원격 사용자 나감: $remoteUid');
+              print('원격 사용자 나감: $remoteUid (이유: $reason)');
               setState(() {
                 this.remoteUid = null;
+                _connectedUsers.remove(remoteUid);
+                _totalUserCount = _connectedUsers.length;
               });
             },
             onLocalVideoStateChanged: (
@@ -164,9 +186,11 @@ class _CamScreenState extends State<CamScreen> {
               LocalVideoStreamReason reason,
             ) {
               print('로컬 비디오 상태 변경: $state, 이유: $reason, 소스: $source');
-              if (state == LocalVideoStreamState.localVideoStreamStateCapturing) {
+              if (state ==
+                  LocalVideoStreamState.localVideoStreamStateCapturing) {
                 print('로컬 비디오 캡처 시작됨');
-              } else if (state == LocalVideoStreamState.localVideoStreamStateEncoding) {
+              } else if (state ==
+                  LocalVideoStreamState.localVideoStreamStateEncoding) {
                 print('로컬 비디오 인코딩 시작됨');
               }
             },
@@ -175,10 +199,10 @@ class _CamScreenState extends State<CamScreen> {
 
         print('비디오 활성화 중...');
         await engine!.enableVideo();
-        
+
         print('오디오 활성화 중...');
         await engine!.enableAudio();
-        
+
         print('비디오 미리보기 시작...');
         await engine!.startPreview();
 
@@ -194,7 +218,7 @@ class _CamScreenState extends State<CamScreen> {
           uid: uid,
           options: options,
         );
-        
+
         print('=== Agora 초기화 완료 ===');
       }
     } catch (e) {
@@ -284,6 +308,64 @@ class _CamScreenState extends State<CamScreen> {
           height: double.infinity,
           child: renderMainView(),
         ),
+        // 방 상태 정보 표시
+        Positioned(
+          top: 50,
+          left: 16,
+          child: Container(
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.black54,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      _isChannelJoined ? Icons.wifi : Icons.wifi_off,
+                      color: _isChannelJoined ? Colors.green : Colors.red,
+                      size: 16,
+                    ),
+                    SizedBox(width: 4),
+                    Text(
+                      _isChannelJoined ? '연결됨' : '연결 안됨',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 4),
+                Text(
+                  '방: $channelName',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 10,
+                  ),
+                ),
+                Text(
+                  '참가자: $_totalUserCount명',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 10,
+                  ),
+                ),
+                if (_connectedUsers.isNotEmpty)
+                  Text(
+                    'UID: ${_connectedUsers.join(", ")}',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 9,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
         // 로컬 비디오 뷰 (작은 화면) - 항상 표시
         Positioned(
           top: 50,
@@ -337,13 +419,13 @@ class _CamScreenState extends State<CamScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
-                Icons.videocam_off,
+                _isChannelJoined ? Icons.videocam_off : Icons.wifi_off,
                 size: 80,
-                color: Colors.white54,
+                color: _isChannelJoined ? Colors.white54 : Colors.red,
               ),
               SizedBox(height: 16),
               Text(
-                '상대방을 기다리는 중...',
+                _isChannelJoined ? '상대방을 기다리는 중...' : '방에 연결 중...',
                 style: TextStyle(
                   color: Colors.white70,
                   fontSize: 18,
@@ -357,6 +439,38 @@ class _CamScreenState extends State<CamScreen> {
                   fontSize: 14,
                 ),
               ),
+              if (_isChannelJoined) ...[
+                SizedBox(height: 8),
+                Text(
+                  '방이 생성되었습니다 ✓',
+                  style: TextStyle(
+                    color: Colors.green,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  '현재 참가자: $_totalUserCount명',
+                  style: TextStyle(
+                    color: Colors.white54,
+                    fontSize: 12,
+                  ),
+                ),
+              ] else ...[
+                SizedBox(height: 8),
+                Text(
+                  '방 생성 중...',
+                  style: TextStyle(
+                    color: Colors.orange,
+                    fontSize: 14,
+                  ),
+                ),
+                SizedBox(height: 8),
+                CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white54),
+                ),
+              ],
             ],
           ),
         ),
