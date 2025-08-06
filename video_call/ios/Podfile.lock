@@ -48,6 +48,9 @@ PODS:
     - Flutter
   - permission_handler_apple (9.3.0):
     - Flutter
+  - shared_preferences_foundation (0.0.1):
+    - Flutter
+    - FlutterMacOS
 
 DEPENDENCIES:
   - agora_rtc_engine (from `.symlinks/plugins/agora_rtc_engine/ios`)
@@ -57,6 +60,7 @@ DEPENDENCIES:
   - Flutter (from `Flutter`)
   - iris_method_channel (from `.symlinks/plugins/iris_method_channel/ios`)
   - permission_handler_apple (from `.symlinks/plugins/permission_handler_apple/ios`)
+  - shared_preferences_foundation (from `.symlinks/plugins/shared_preferences_foundation/darwin`)
 
 SPEC REPOS:
   trunk:
@@ -79,6 +83,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/iris_method_channel/ios"
   permission_handler_apple:
     :path: ".symlinks/plugins/permission_handler_apple/ios"
+  shared_preferences_foundation:
+    :path: ".symlinks/plugins/shared_preferences_foundation/darwin"
 
 SPEC CHECKSUMS:
   agora_rtc_engine: d7d8176df20d9e8027bfd9c32d0095f8a5e860a0
@@ -91,6 +97,7 @@ SPEC CHECKSUMS:
   Flutter: e0871f40cf51350855a761d2e70bf5af5b9b5de7
   iris_method_channel: b9db2053dac3dc84e256c8792eff6f11323a53bd
   permission_handler_apple: 4ed2196e43d0651e8ff7ca3483a069d469701f2d
+  shared_preferences_foundation: 9e1978ff2562383bd5676f64ec4e9aa8fa06a6f7
 
 PODFILE CHECKSUM: 97e2d619fbd0bb0d9d8be1c8da9d3eab71a0414f
 

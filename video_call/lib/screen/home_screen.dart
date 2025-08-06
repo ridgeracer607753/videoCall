@@ -5,6 +5,8 @@ import 'package:video_call/screen/cam_screen.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:video_call/const/keys.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -102,6 +104,104 @@ class _FooterState extends State<_Footer> {
   bool _isCheckingRoom = false;
   bool? _roomExists;
   int _participantCount = 0;
+
+  // 주인장 관련 변수들
+  bool _isHost = false;
+  bool _isLongPressing = false;
+  Timer? _longPressTimer;
+  double _pressProgress = 0.0;
+  Timer? _progressTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHostStatus();
+  }
+
+  @override
+  void dispose() {
+    _longPressTimer?.cancel();
+    _progressTimer?.cancel();
+    super.dispose();
+  }
+
+  // 주인장 상태 로드
+  Future<void> _loadHostStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _isHost = prefs.getBool('is_host') ?? false;
+    });
+  }
+
+  // 주인장 권한 설정
+  Future<void> _setHostStatus(bool isHost) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('is_host', isHost);
+    if (isHost) {
+      // 현재 UID를 저장
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await prefs.setInt('host_uid', now % 999999 + 1);
+    }
+    setState(() {
+      _isHost = isHost;
+    });
+  }
+
+  // 5초 장누름 처리
+  void _onLongPressStart() {
+    if (_isHost) return; // 이미 주인장이면 무시
+
+    setState(() {
+      _isLongPressing = true;
+      _pressProgress = 0.0;
+    });
+
+    // 프로그레스 애니메이션
+    _progressTimer = Timer.periodic(Duration(milliseconds: 50), (timer) {
+      setState(() {
+        _pressProgress += 0.01; // 5초 = 100 * 50ms
+      });
+
+      if (_pressProgress >= 1.0) {
+        timer.cancel();
+      }
+    });
+
+    // 5초 타이머
+    _longPressTimer = Timer(Duration(seconds: 5), () {
+      _becomeHost();
+    });
+  }
+
+  void _onLongPressEnd() {
+    _longPressTimer?.cancel();
+    _progressTimer?.cancel();
+    setState(() {
+      _isLongPressing = false;
+      _pressProgress = 0.0;
+    });
+  }
+
+  // 주인장 되기
+  void _becomeHost() {
+    _setHostStatus(true);
+    _onLongPressEnd();
+
+    // 성공 메시지 표시
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.workspace_premium, color: Colors.yellow),
+            SizedBox(width: 8),
+            Text('주인장 권한을 획득했습니다!'),
+          ],
+        ),
+        backgroundColor: Colors.green,
+        duration: Duration(seconds: 3),
+      ),
+    );
+  }
 
   Future<void> _checkRoomStatus() async {
     setState(() {
@@ -234,6 +334,59 @@ class _FooterState extends State<_Footer> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          // 주인장 상태 표시
+          if (_isHost) ...[
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.yellow[100],
+                border: Border.all(color: Colors.yellow[700]!, width: 2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.workspace_premium, color: Colors.yellow[700], size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    '주인장 권한 보유',
+                    style: TextStyle(
+                      color: Colors.yellow[800],
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: 8),
+            TextButton(
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: Text('주인장 권한 해제'),
+                    content: Text('주인장 권한을 해제하시겠습니까?'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: Text('취소'),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          _setHostStatus(false);
+                          Navigator.pop(context);
+                        },
+                        child: Text('해제'),
+                      ),
+                    ],
+                  ),
+                );
+              },
+              child: Text('권한 해제', style: TextStyle(color: Colors.red)),
+            ),
+            SizedBox(height: 16),
+          ],
+
           // 방 상태 정보 표시
           if (_roomExists != null) ...[
             Container(
@@ -316,6 +469,68 @@ class _FooterState extends State<_Footer> {
           ),
 
           SizedBox(height: 12),
+
+          // 주인장 되기 버튼 (주인장이 아닐 때만 표시)
+          if (!_isHost) ...[
+            GestureDetector(
+              onTapDown: (_) => _onLongPressStart(),
+              onTapUp: (_) => _onLongPressEnd(),
+              onTapCancel: _onLongPressEnd,
+              child: Container(
+                width: 200,
+                height: 50,
+                decoration: BoxDecoration(
+                  color:
+                      _isLongPressing ? Colors.yellow[300] : Colors.yellow[100],
+                  border: Border.all(color: Colors.yellow[700]!, width: 2),
+                  borderRadius: BorderRadius.circular(25),
+                ),
+                child: Stack(
+                  children: [
+                    // 프로그레스 바
+                    if (_isLongPressing)
+                      Positioned(
+                        left: 0,
+                        top: 0,
+                        bottom: 0,
+                        child: Container(
+                          width: 200 * _pressProgress,
+                          decoration: BoxDecoration(
+                            color: Colors.yellow[600],
+                            borderRadius: BorderRadius.circular(25),
+                          ),
+                        ),
+                      ),
+                    // 텍스트
+                    Center(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.workspace_premium,
+                            color: Colors.yellow[800],
+                            size: 20,
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            _isLongPressing
+                                ? '${(5 - (_pressProgress * 5)).ceil()}초...'
+                                : '주인장 되기 (5초 누르기)',
+                            style: TextStyle(
+                              color: Colors.yellow[800],
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SizedBox(height: 12),
+          ],
 
           // 입장하기 버튼
           ElevatedButton.icon(
