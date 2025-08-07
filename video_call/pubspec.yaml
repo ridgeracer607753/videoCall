@@ -20,12 +20,14 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.13.1
 
 flutter:
   uses-material-design: true
 
   assets:
     - asset/img/
+    - asset/icon/
 
   fonts:
     - family: NotoSans
@@ -42,3 +44,11 @@ flutter:
           weight: 300
         - asset: asset/font/NotoSansKR-Thin.otf
           weight: 100
+
+# 앱 아이콘 설정
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "asset/icon/app_icon_converted.png"
+  adaptive_icon_background: "#ffffff"
+  adaptive_icon_foreground: "asset/icon/app_icon_converted.png"
