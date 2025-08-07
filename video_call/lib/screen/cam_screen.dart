@@ -478,6 +478,17 @@ class _CamScreenState extends State<CamScreen> {
         print('오디오 활성화 중...');
         await engine!.enableAudio();
 
+        // 비디오 인코더 설정 (해상도 및 품질 개선)
+        print('비디오 인코더 설정 중...');
+        await engine!.setVideoEncoderConfiguration(
+          VideoEncoderConfiguration(
+            dimensions: VideoDimensions(width: 640, height: 480), // 4:3 비율
+            frameRate: 15,
+            bitrate: 400,
+            orientationMode: OrientationMode.orientationModeAdaptive,
+          ),
+        );
+
         print('비디오 미리보기 시작...');
         await engine!.startPreview();
 
@@ -1262,13 +1273,13 @@ class _CamScreenState extends State<CamScreen> {
             ),
           ),
         ),
-        // 내 화면 (왼쪽 상단, 빨간 테두리)
+        // 내 화면 (왼쪽 상단, 빨간 테두리) - 4:3 비율로 수정
         Positioned(
           top: 50,
           left: 16,
           child: Container(
             width: 120,
-            height: 160,
+            height: 90, // 4:3 비율 (120:90 = 4:3)
             decoration: BoxDecoration(
               border: Border.all(color: Colors.red, width: 3),
               borderRadius: BorderRadius.circular(8),
@@ -1280,7 +1291,7 @@ class _CamScreenState extends State<CamScreen> {
                   rtcEngine: engine!,
                   canvas: VideoCanvas(
                     uid: 0, // 로컬 비디오 (내 화면)
-                    renderMode: RenderModeType.renderModeAdaptive,
+                    renderMode: RenderModeType.renderModeHidden, // 왜곡 방지
                   ),
                 ),
               ),
@@ -1495,7 +1506,7 @@ class _CamScreenState extends State<CamScreen> {
         rtcEngine: engine!,
         canvas: VideoCanvas(
           uid: _mainScreenUid,
-          renderMode: RenderModeType.renderModeAdaptive,
+          renderMode: RenderModeType.renderModeHidden, // 왜곡 방지
         ),
         connection: RtcConnection(
           channelId: channelName,
@@ -1513,13 +1524,13 @@ class _CamScreenState extends State<CamScreen> {
       int userId = miniUsers[i];
       miniScreens.add(
         Positioned(
-          top: 50 + (i * 170.0), // 각 미니 화면을 세로로 배치
+          top: 50 + (i * 100.0), // 각 미니 화면을 세로로 배치 (간격 조정)
           right: 16,
           child: GestureDetector(
             onTap: () => _switchToMainScreen(userId),
             child: Container(
               width: 120,
-              height: 160,
+              height: 90, // 4:3 비율로 수정
               decoration: BoxDecoration(
                 border: Border.all(color: Colors.white, width: 2),
                 borderRadius: BorderRadius.circular(8),
@@ -1533,7 +1544,7 @@ class _CamScreenState extends State<CamScreen> {
                         rtcEngine: engine!,
                         canvas: VideoCanvas(
                           uid: userId,
-                          renderMode: RenderModeType.renderModeAdaptive,
+                          renderMode: RenderModeType.renderModeHidden, // 왜곡 방지
                         ),
                         connection: RtcConnection(
                           channelId: channelName,
