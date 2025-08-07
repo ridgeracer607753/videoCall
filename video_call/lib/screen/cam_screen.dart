@@ -39,7 +39,7 @@ class _CamScreenState extends State<CamScreen> {
 
   // 카메라 제어
   bool _isFrontCamera = true;
-  
+
   // 데이터 스트림 ID
   int? _dataStreamId;
 
@@ -479,7 +479,7 @@ class _CamScreenState extends State<CamScreen> {
     try {
       await _sendCameraSwitchRequest();
       print('✅ Agora 데이터 스트림 전송 성공!');
-      
+
       // 성공 피드백
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -496,7 +496,7 @@ class _CamScreenState extends State<CamScreen> {
       );
     } catch (e) {
       print('❌ Agora 데이터 스트림 실패: $e');
-      
+
       // 실패 피드백
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -672,7 +672,6 @@ class _CamScreenState extends State<CamScreen> {
       );
 
       print('✅ 카메라 전환 요청 전송 완료!');
-
     } catch (e) {
       print('❌ 카메라 전환 요청 전송 실패: $e');
       rethrow;
@@ -719,15 +718,14 @@ class _CamScreenState extends State<CamScreen> {
       String kickMessage =
           "KICK_HOST:$uid:${DateTime.now().millisecondsSinceEpoch}";
       Uint8List messageData = Uint8List.fromList(kickMessage.codeUnits);
-      
+
       await engine!.sendStreamMessage(
         streamId: _dataStreamId!,
         data: messageData,
         length: messageData.length,
       );
-      
-      print('💬 강퇴 메시지 전송: $kickMessage (Stream ID: $_dataStreamId)');
 
+      print('💬 강퇴 메시지 전송: $kickMessage (Stream ID: $_dataStreamId)');
     } catch (e) {
       print('❌ 강퇴 메시지 전송 실패: $e');
     }
@@ -1110,17 +1108,36 @@ class _CamScreenState extends State<CamScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '일반 참가자',
+                        '손님',
                         style: TextStyle(
                           color: Colors.white70,
                           fontSize: 10,
                         ),
                       ),
-                      if (_hostUid != null)
+                      if (_hostUid != null &&
+                          _connectedUsers.contains(_hostUid))
                         Text(
-                          '주인장: $_hostUid',
+                          '큰 화면: 주인장($_hostUid)',
                           style: TextStyle(
-                            color: Colors.yellow,
+                            color: Colors.green,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        )
+                      else if (_connectedUsers.isNotEmpty)
+                        Text(
+                          '큰 화면: ${_connectedUsers.first}',
+                          style: TextStyle(
+                            color: Colors.orange,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        )
+                      else
+                        Text(
+                          '큰 화면: 대기 중',
+                          style: TextStyle(
+                            color: Colors.red,
                             fontSize: 9,
                             fontWeight: FontWeight.bold,
                           ),
@@ -1408,19 +1425,77 @@ class _CamScreenState extends State<CamScreen> {
       );
     }
 
-    // 원격 사용자가 있을 때는 원격 비디오를 메인 화면에 표시
-    return AgoraVideoView(
-      controller: VideoViewController.remote(
-        rtcEngine: engine!,
-        canvas: VideoCanvas(
-          uid: remoteUid,
-          renderMode: RenderModeType.renderModeAdaptive,
+    // === 역할별 화면 표시 로직 ===
+
+    // 주인폰의 경우: 아무나 보여주기 (기존 로직 유지)
+    if (_isHost) {
+      print('🎯 주인폰: 원격 사용자($remoteUid) 화면을 큰 화면에 표시');
+      return AgoraVideoView(
+        controller: VideoViewController.remote(
+          rtcEngine: engine!,
+          canvas: VideoCanvas(
+            uid: remoteUid,
+            renderMode: RenderModeType.renderModeAdaptive,
+          ),
+          connection: RtcConnection(
+            channelId: channelName,
+          ),
         ),
-        connection: RtcConnection(
-          channelId: channelName,
-        ),
-      ),
-    );
+      );
+    }
+
+    // 손님폰의 경우: 주인장 화면만 큰 화면에 표시
+    else {
+      // 주인장이 감지된 경우
+      if (_hostUid != null && _connectedUsers.contains(_hostUid)) {
+        print('👥 손님폰: 주인장($_hostUid) 화면을 큰 화면에 표시');
+        return AgoraVideoView(
+          controller: VideoViewController.remote(
+            rtcEngine: engine!,
+            canvas: VideoCanvas(
+              uid: _hostUid,
+              renderMode: RenderModeType.renderModeAdaptive,
+            ),
+            connection: RtcConnection(
+              channelId: channelName,
+            ),
+          ),
+        );
+      }
+      // 주인장이 감지되지 않은 경우 - 첫 번째 연결된 사용자를 주인장으로 간주
+      else if (_connectedUsers.isNotEmpty) {
+        int firstUser = _connectedUsers.first;
+        print('👥 손님폰: 주인장 미감지, 첫 번째 사용자($firstUser)를 주인장으로 간주하여 큰 화면에 표시');
+        return AgoraVideoView(
+          controller: VideoViewController.remote(
+            rtcEngine: engine!,
+            canvas: VideoCanvas(
+              uid: firstUser,
+              renderMode: RenderModeType.renderModeAdaptive,
+            ),
+            connection: RtcConnection(
+              channelId: channelName,
+            ),
+          ),
+        );
+      }
+      // fallback: 기본 원격 사용자 표시
+      else {
+        print('👥 손님폰: fallback - 기본 원격 사용자($remoteUid) 표시');
+        return AgoraVideoView(
+          controller: VideoViewController.remote(
+            rtcEngine: engine!,
+            canvas: VideoCanvas(
+              uid: remoteUid,
+              renderMode: RenderModeType.renderModeAdaptive,
+            ),
+            connection: RtcConnection(
+              channelId: channelName,
+            ),
+          ),
+        );
+      }
+    }
   }
 
   @override
