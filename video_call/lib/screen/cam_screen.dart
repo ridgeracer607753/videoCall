@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 // agora_uikit 제거됨
@@ -64,6 +65,13 @@ class _CamScreenState extends State<CamScreen> {
   @override
   void initState() {
     super.initState();
+
+    // 세로화면 고정
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
+
     _generateUniqueUid();
     _loadHostStatus();
     _checkTokenExpiry();
@@ -1570,6 +1578,15 @@ class _CamScreenState extends State<CamScreen> {
     _alternativeCommTimer?.cancel();
     engine?.leaveChannel();
     engine?.release();
+
+    // 화면 방향 제한 해제 (필요한 경우)
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+
     super.dispose();
   }
 }
