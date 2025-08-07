@@ -58,6 +58,9 @@ class _CamScreenState extends State<CamScreen> {
   // 대안 통신을 위한 타이머
   Timer? _alternativeCommTimer;
 
+  // 화면 배치 관리
+  int? _mainScreenUid; // 큰 화면에 표시할 사용자 UID
+
   @override
   void initState() {
     super.initState();
@@ -135,6 +138,54 @@ class _CamScreenState extends State<CamScreen> {
         print('🎯 자동 감지된 주인장 UID: $smallestUid');
       }
     });
+  }
+
+  // 큰 화면에 표시할 사용자 결정
+  void _updateMainScreenUid() {
+    if (_connectedUsers.isEmpty) {
+      _mainScreenUid = null;
+      return;
+    }
+
+    // 참가자가 2명인 경우: 서로 보이게
+    if (_totalUserCount == 2) {
+      // 상대방을 큰 화면에 표시
+      List<int> otherUsers = _connectedUsers.where((u) => u != uid).toList();
+      if (otherUsers.isNotEmpty) {
+        _mainScreenUid = otherUsers.first;
+      }
+    }
+    // 3명 이상인 경우: 기본적으로 첫 번째 사용자를 큰 화면에 표시
+    else if (_totalUserCount >= 3) {
+      if (_mainScreenUid == null || !_connectedUsers.contains(_mainScreenUid)) {
+        List<int> otherUsers = _connectedUsers.where((u) => u != uid).toList();
+        if (otherUsers.isNotEmpty) {
+          _mainScreenUid = otherUsers.first;
+        }
+      }
+    }
+
+    print('🖥️ 큰 화면 UID 업데이트: $_mainScreenUid (총 $_totalUserCount명)');
+  }
+
+  // 미니 화면 클릭 시 큰 화면과 전환
+  void _switchToMainScreen(int targetUid) {
+    if (_connectedUsers.contains(targetUid)) {
+      setState(() {
+        _mainScreenUid = targetUid;
+      });
+      print('🔄 화면 전환: $targetUid를 큰 화면으로 이동');
+    }
+  }
+
+  // 미니 화면에 표시할 사용자 목록 가져오기
+  List<int> _getMiniScreenUsers() {
+    if (_totalUserCount <= 2) {
+      return []; // 2명 이하일 때는 미니 화면 없음
+    }
+
+    List<int> otherUsers = _connectedUsers.where((u) => u != uid).toList();
+    return otherUsers.where((u) => u != _mainScreenUid).toList();
   }
 
   // 기기 고유 uid 생성
@@ -257,6 +308,9 @@ class _CamScreenState extends State<CamScreen> {
 
                 // 자신도 주인장 감지 대상에 포함
                 _detectHostFromUsers();
+
+                // 화면 배치 업데이트
+                _updateMainScreenUid();
               });
 
               // 채널 참가 후 데이터 스트림 생성
@@ -294,6 +348,9 @@ class _CamScreenState extends State<CamScreen> {
 
                 // 주인장 감지 로직 - 가장 작은 UID를 주인장으로 간주
                 _detectHostFromUsers();
+
+                // 화면 배치 업데이트
+                _updateMainScreenUid();
               });
 
               print('업데이트된 사용자 목록: $_connectedUsers (총 $_totalUserCount명)');
@@ -306,12 +363,17 @@ class _CamScreenState extends State<CamScreen> {
             ) {
               print('원격 사용자 나감: $remoteUid (이유: $reason)');
               setState(() {
-                this.remoteUid = null;
+                if (this.remoteUid == remoteUid) {
+                  this.remoteUid = null;
+                }
                 _connectedUsers.remove(remoteUid);
                 _totalUserCount = _connectedUsers.length;
 
                 // 사용자가 나간 후 주인장 재감지
                 _detectHostFromUsers();
+
+                // 화면 배치 업데이트
+                _updateMainScreenUid();
               });
             },
             onLocalVideoStateChanged: (
@@ -1038,9 +1100,9 @@ class _CamScreenState extends State<CamScreen> {
           height: double.infinity,
           child: renderMainView(),
         ),
-        // 방 상태 정보 표시
+        // 방 상태 정보 표시 (위치 조정)
         Positioned(
-          top: 50,
+          top: 230,
           left: 16,
           child: Container(
             padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1192,15 +1254,15 @@ class _CamScreenState extends State<CamScreen> {
             ),
           ),
         ),
-        // 로컬 비디오 뷰 (작은 화면) - 항상 표시
+        // 내 화면 (왼쪽 상단, 빨간 테두리)
         Positioned(
           top: 50,
-          right: 16,
+          left: 16,
           child: Container(
             width: 120,
             height: 160,
             decoration: BoxDecoration(
-              border: Border.all(color: Colors.white, width: 2),
+              border: Border.all(color: Colors.red, width: 3),
               borderRadius: BorderRadius.circular(8),
             ),
             child: ClipRRect(
@@ -1209,7 +1271,7 @@ class _CamScreenState extends State<CamScreen> {
                 controller: VideoViewController(
                   rtcEngine: engine!,
                   canvas: VideoCanvas(
-                    uid: 0, // 로컬 비디오 (항상 표시)
+                    uid: 0, // 로컬 비디오 (내 화면)
                     renderMode: RenderModeType.renderModeAdaptive,
                   ),
                 ),
@@ -1217,6 +1279,8 @@ class _CamScreenState extends State<CamScreen> {
             ),
           ),
         ),
+        // 미니 화면들 (오른쪽 상단, 3명 이상일 때만 표시)
+        ..._buildMiniScreens(),
         // 주인장 제어 버튼들 (권한이 있는 경우에만 표시)
         if (_canControlHost()) ...[
           Positioned(
@@ -1349,8 +1413,8 @@ class _CamScreenState extends State<CamScreen> {
   }
 
   Widget renderMainView() {
-    if (remoteUid == null) {
-      // 원격 사용자가 없을 때는 대기 화면 표시
+    // 연결된 사용자가 없거나 큰 화면에 표시할 사용자가 없는 경우
+    if (_connectedUsers.isEmpty || _mainScreenUid == null) {
       return Container(
         color: Colors.black87,
         child: Center(
@@ -1396,15 +1460,6 @@ class _CamScreenState extends State<CamScreen> {
                     fontSize: 12,
                   ),
                 ),
-                if (remoteUid == null && _totalUserCount == 1)
-                  Text(
-                    '⚠️ 다른 사용자가 보이지 않나요?',
-                    style: TextStyle(
-                      color: Colors.orange,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
               ] else ...[
                 SizedBox(height: 8),
                 Text(
@@ -1425,77 +1480,89 @@ class _CamScreenState extends State<CamScreen> {
       );
     }
 
-    // === 역할별 화면 표시 로직 ===
+    // 큰 화면에 지정된 사용자 표시
+    print('🖥️ 큰 화면에 사용자 $_mainScreenUid 표시 (총 $_totalUserCount명)');
+    return AgoraVideoView(
+      controller: VideoViewController.remote(
+        rtcEngine: engine!,
+        canvas: VideoCanvas(
+          uid: _mainScreenUid,
+          renderMode: RenderModeType.renderModeAdaptive,
+        ),
+        connection: RtcConnection(
+          channelId: channelName,
+        ),
+      ),
+    );
+  }
 
-    // 주인폰의 경우: 아무나 보여주기 (기존 로직 유지)
-    if (_isHost) {
-      print('🎯 주인폰: 원격 사용자($remoteUid) 화면을 큰 화면에 표시');
-      return AgoraVideoView(
-        controller: VideoViewController.remote(
-          rtcEngine: engine!,
-          canvas: VideoCanvas(
-            uid: remoteUid,
-            renderMode: RenderModeType.renderModeAdaptive,
-          ),
-          connection: RtcConnection(
-            channelId: channelName,
+  // 미니 화면들 빌드
+  List<Widget> _buildMiniScreens() {
+    List<int> miniUsers = _getMiniScreenUsers();
+    List<Widget> miniScreens = [];
+
+    for (int i = 0; i < miniUsers.length; i++) {
+      int userId = miniUsers[i];
+      miniScreens.add(
+        Positioned(
+          top: 50 + (i * 170.0), // 각 미니 화면을 세로로 배치
+          right: 16,
+          child: GestureDetector(
+            onTap: () => _switchToMainScreen(userId),
+            child: Container(
+              width: 120,
+              height: 160,
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.white, width: 2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: Stack(
+                  children: [
+                    AgoraVideoView(
+                      controller: VideoViewController.remote(
+                        rtcEngine: engine!,
+                        canvas: VideoCanvas(
+                          uid: userId,
+                          renderMode: RenderModeType.renderModeAdaptive,
+                        ),
+                        connection: RtcConnection(
+                          channelId: channelName,
+                        ),
+                      ),
+                    ),
+                    // 사용자 ID 표시
+                    Positioned(
+                      bottom: 4,
+                      left: 4,
+                      child: Container(
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          '$userId',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
       );
     }
 
-    // 손님폰의 경우: 주인장 화면만 큰 화면에 표시
-    else {
-      // 주인장이 감지된 경우
-      if (_hostUid != null && _connectedUsers.contains(_hostUid)) {
-        print('👥 손님폰: 주인장($_hostUid) 화면을 큰 화면에 표시');
-        return AgoraVideoView(
-          controller: VideoViewController.remote(
-            rtcEngine: engine!,
-            canvas: VideoCanvas(
-              uid: _hostUid,
-              renderMode: RenderModeType.renderModeAdaptive,
-            ),
-            connection: RtcConnection(
-              channelId: channelName,
-            ),
-          ),
-        );
-      }
-      // 주인장이 감지되지 않은 경우 - 첫 번째 연결된 사용자를 주인장으로 간주
-      else if (_connectedUsers.isNotEmpty) {
-        int firstUser = _connectedUsers.first;
-        print('👥 손님폰: 주인장 미감지, 첫 번째 사용자($firstUser)를 주인장으로 간주하여 큰 화면에 표시');
-        return AgoraVideoView(
-          controller: VideoViewController.remote(
-            rtcEngine: engine!,
-            canvas: VideoCanvas(
-              uid: firstUser,
-              renderMode: RenderModeType.renderModeAdaptive,
-            ),
-            connection: RtcConnection(
-              channelId: channelName,
-            ),
-          ),
-        );
-      }
-      // fallback: 기본 원격 사용자 표시
-      else {
-        print('👥 손님폰: fallback - 기본 원격 사용자($remoteUid) 표시');
-        return AgoraVideoView(
-          controller: VideoViewController.remote(
-            rtcEngine: engine!,
-            canvas: VideoCanvas(
-              uid: remoteUid,
-              renderMode: RenderModeType.renderModeAdaptive,
-            ),
-            connection: RtcConnection(
-              channelId: channelName,
-            ),
-          ),
-        );
-      }
-    }
+    return miniScreens;
   }
 
   @override
