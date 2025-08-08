@@ -44,11 +44,10 @@ flutter:
           weight: 300
         - asset: asset/font/NotoSansKR-Thin.otf
           weight: 100
-
-# 앱 아이콘 설정
-flutter_launcher_icons:
-  android: "launcher_icon"
-  ios: true
-  image_path: "asset/icon/app_icon_converted.png"
-  adaptive_icon_background: "#ffffff"
-  adaptive_icon_foreground: "asset/icon/app_icon_converted.png"
+# 앱 아이콘 설정 - 기본 Flutter 아이콘 사용
+# flutter_launcher_icons:
+#   android: "launcher_icon"
+#   ios: true
+#   image_path: "asset/icon/app_icon_converted.png"
+#   adaptive_icon_background: "#ffffff"
+#   adaptive_icon_foreground: "asset/icon/app_icon_converted.png"

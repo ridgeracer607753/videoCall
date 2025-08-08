@@ -407,20 +407,16 @@ class _CamScreenState extends State<CamScreen> {
 
               if (err == ErrorCodeType.errTokenExpired) {
                 print('⚠️ 토큰이 만료되었습니다!');
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Row(
-                      children: [
-                        Icon(Icons.warning, color: Colors.white),
-                        SizedBox(width: 8),
-                        Expanded(child: Text('토큰이 만료되었습니다. 개발자에게 문의하세요.')),
-                      ],
-                    ),
-                    backgroundColor: Colors.red,
-                    duration: Duration(seconds: 5),
-                  ),
-                );
+                _handleTokenExpired();
               }
+            },
+            onTokenPrivilegeWillExpire: (connection, token) {
+              print('⚠️ 토큰이 30초 후 만료됩니다. 갱신이 필요합니다.');
+              _handleTokenWillExpire();
+            },
+            onRequestToken: (connection) {
+              print('⚠️ 새 토큰이 필요합니다.');
+              _handleTokenExpired();
             },
             onConnectionStateChanged: (connection, state, reason) {
               print('=== 연결 상태 변경 ===');
@@ -1030,6 +1026,97 @@ class _CamScreenState extends State<CamScreen> {
     }
   }
 
+  // 토큰 만료 30초 전 처리
+  void _handleTokenWillExpire() {
+    print('🔄 토큰 만료 30초 전 - 새 토큰 준비 중...');
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.update, color: Colors.white),
+            SizedBox(width: 8),
+            Text('토큰을 갱신하고 있습니다...'),
+          ],
+        ),
+        backgroundColor: Colors.orange,
+        duration: Duration(seconds: 3),
+      ),
+    );
+
+    // 여기서 서버에서 새 토큰을 받아와야 하지만,
+    // 현재는 사용자에게 알림만 표시
+    _requestNewToken();
+  }
+
+  // 토큰 만료 처리
+  void _handleTokenExpired() {
+    print('❌ 토큰이 완전히 만료됨');
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.error, color: Colors.white),
+                SizedBox(width: 8),
+                Text('토큰이 만료되었습니다'),
+              ],
+            ),
+            SizedBox(height: 4),
+            Text('새 토큰으로 다시 연결합니다...', style: TextStyle(fontSize: 12)),
+          ],
+        ),
+        backgroundColor: Colors.red,
+        duration: Duration(seconds: 5),
+      ),
+    );
+
+    // 토큰 갱신 시도
+    _requestNewToken();
+  }
+
+  // 새 토큰 요청 (실제로는 서버에서 받아와야 함)
+  Future<void> _requestNewToken() async {
+    try {
+      print('🔄 새 토큰 요청 중...');
+
+      // 현재는 온라인 토큰 생성기 URL을 알려주는 메시지 표시
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('새 토큰이 필요합니다'),
+              SizedBox(height: 4),
+              Text('webdemo.agora.io/token-generator에서 새 토큰을 생성하세요',
+                  style: TextStyle(fontSize: 10)),
+            ],
+          ),
+          backgroundColor: Colors.blue,
+          duration: Duration(seconds: 8),
+          action: SnackBarAction(
+            label: '홈으로',
+            textColor: Colors.white,
+            onPressed: () {
+              Navigator.of(context).popUntil((route) => route.isFirst);
+            },
+          ),
+        ),
+      );
+
+      // 실제 구현시에는 여기서 서버 API 호출
+      // String newToken = await getTokenFromServer(channelName, uid);
+      // await engine!.renewToken(newToken);
+    } catch (e) {
+      print('❌ 토큰 갱신 실패: $e');
+    }
+  }
+
   String _formatTime(DateTime time) {
     final now = DateTime.now();
     final diff = now.difference(time).inSeconds;
@@ -1119,160 +1206,160 @@ class _CamScreenState extends State<CamScreen> {
           height: double.infinity,
           child: renderMainView(),
         ),
-        // 방 상태 정보 표시 (위치 조정)
-        Positioned(
-          top: 230,
-          left: 16,
-          child: Container(
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.black54,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      _isChannelJoined ? Icons.wifi : Icons.wifi_off,
-                      color: _isChannelJoined ? Colors.green : Colors.red,
-                      size: 16,
-                    ),
-                    SizedBox(width: 4),
-                    Text(
-                      _isChannelJoined ? '연결됨' : '연결 안됨',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 4),
-                Text(
-                  '방: $channelName',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 10,
-                  ),
-                ),
-                Text(
-                  '참가자: $_totalUserCount명',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 10,
-                  ),
-                ),
-                if (_isHost)
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.workspace_premium,
-                        color: Colors.yellow,
-                        size: 12,
-                      ),
-                      SizedBox(width: 2),
-                      Text(
-                        '주인장 (나)',
-                        style: TextStyle(
-                          color: Colors.yellow,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  )
-                else
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '손님',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 10,
-                        ),
-                      ),
-                      if (_hostUid != null &&
-                          _connectedUsers.contains(_hostUid))
-                        Text(
-                          '큰 화면: 주인장($_hostUid)',
-                          style: TextStyle(
-                            color: Colors.green,
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        )
-                      else if (_connectedUsers.isNotEmpty)
-                        Text(
-                          '큰 화면: ${_connectedUsers.first}',
-                          style: TextStyle(
-                            color: Colors.orange,
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        )
-                      else
-                        Text(
-                          '큰 화면: 대기 중',
-                          style: TextStyle(
-                            color: Colors.red,
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                    ],
-                  ),
-                if (_connectedUsers.isNotEmpty)
-                  Text(
-                    'UID: ${_connectedUsers.join(", ")}',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 9,
-                    ),
-                  ),
-                SizedBox(height: 2),
-                Text(
-                  '연결: $_connectionState',
-                  style: TextStyle(
-                    color: _connectionState == "연결됨"
-                        ? Colors.green
-                        : Colors.orange,
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Text(
-                  '$_networkQuality',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 8,
-                  ),
-                ),
-                Text(
-                  '토큰: $_tokenStatus',
-                  style: TextStyle(
-                    color: _tokenStatus.contains("유효")
-                        ? Colors.green
-                        : Colors.orange,
-                    fontSize: 8,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                if (_lastConnectionUpdate != null)
-                  Text(
-                    '업데이트: ${_formatTime(_lastConnectionUpdate!)}',
-                    style: TextStyle(
-                      color: Colors.white54,
-                      fontSize: 8,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
+        // 방 상태 정보 표시 - 숨김 처리
+        // Positioned(
+        //   top: 230,
+        //   left: 16,
+        //   child: Container(
+        //     padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        //     decoration: BoxDecoration(
+        //       color: Colors.black54,
+        //       borderRadius: BorderRadius.circular(8),
+        //     ),
+        //     child: Column(
+        //       crossAxisAlignment: CrossAxisAlignment.start,
+        //       children: [
+        //         Row(
+        //           children: [
+        //             Icon(
+        //               _isChannelJoined ? Icons.wifi : Icons.wifi_off,
+        //               color: _isChannelJoined ? Colors.green : Colors.red,
+        //               size: 16,
+        //             ),
+        //             SizedBox(width: 4),
+        //             Text(
+        //               _isChannelJoined ? '연결됨' : '연결 안됨',
+        //               style: TextStyle(
+        //                 color: Colors.white,
+        //                 fontSize: 12,
+        //                 fontWeight: FontWeight.bold,
+        //               ),
+        //             ),
+        //           ],
+        //         ),
+        //         SizedBox(height: 4),
+        //         Text(
+        //           '방: $channelName',
+        //           style: TextStyle(
+        //             color: Colors.white70,
+        //             fontSize: 10,
+        //           ),
+        //         ),
+        //         Text(
+        //           '참가자: $_totalUserCount명',
+        //           style: TextStyle(
+        //             color: Colors.white70,
+        //             fontSize: 10,
+        //           ),
+        //         ),
+        //         if (_isHost)
+        //           Row(
+        //             children: [
+        //               Icon(
+        //                 Icons.workspace_premium,
+        //                 color: Colors.yellow,
+        //                 size: 12,
+        //               ),
+        //               SizedBox(width: 2),
+        //               Text(
+        //                 '주인장 (나)',
+        //                 style: TextStyle(
+        //                   color: Colors.yellow,
+        //                   fontSize: 10,
+        //                   fontWeight: FontWeight.bold,
+        //                 ),
+        //               ),
+        //             ],
+        //           )
+        //         else
+        //           Column(
+        //             crossAxisAlignment: CrossAxisAlignment.start,
+        //             children: [
+        //               Text(
+        //                 '손님',
+        //                 style: TextStyle(
+        //                   color: Colors.white70,
+        //                   fontSize: 10,
+        //                 ),
+        //               ),
+        //               if (_hostUid != null &&
+        //                   _connectedUsers.contains(_hostUid))
+        //                 Text(
+        //                   '큰 화면: 주인장($_hostUid)',
+        //                   style: TextStyle(
+        //                     color: Colors.green,
+        //                     fontSize: 9,
+        //                     fontWeight: FontWeight.bold,
+        //                   ),
+        //                 )
+        //               else if (_connectedUsers.isNotEmpty)
+        //                 Text(
+        //                   '큰 화면: ${_connectedUsers.first}',
+        //                   style: TextStyle(
+        //                     color: Colors.orange,
+        //                     fontSize: 9,
+        //                     fontWeight: FontWeight.bold,
+        //                   ),
+        //                 )
+        //               else
+        //                 Text(
+        //                   '큰 화면: 대기 중',
+        //                   style: TextStyle(
+        //                     color: Colors.red,
+        //                     fontSize: 9,
+        //                     fontWeight: FontWeight.bold,
+        //                   ),
+        //                 ),
+        //             ],
+        //           ),
+        //         if (_connectedUsers.isNotEmpty)
+        //           Text(
+        //             'UID: ${_connectedUsers.join(", ")}',
+        //             style: TextStyle(
+        //               color: Colors.white70,
+        //               fontSize: 9,
+        //             ),
+        //           ),
+        //         SizedBox(height: 2),
+        //         Text(
+        //           '연결: $_connectionState',
+        //           style: TextStyle(
+        //             color: _connectionState == "연결됨"
+        //                 ? Colors.green
+        //                 : Colors.orange,
+        //             fontSize: 9,
+        //             fontWeight: FontWeight.bold,
+        //           ),
+        //         ),
+        //         Text(
+        //           '$_networkQuality',
+        //           style: TextStyle(
+        //             color: Colors.white70,
+        //             fontSize: 8,
+        //           ),
+        //         ),
+        //         Text(
+        //           '토큰: $_tokenStatus',
+        //           style: TextStyle(
+        //             color: _tokenStatus.contains("유효")
+        //                 ? Colors.green
+        //                 : Colors.orange,
+        //             fontSize: 8,
+        //             fontWeight: FontWeight.bold,
+        //           ),
+        //         ),
+        //         if (_lastConnectionUpdate != null)
+        //           Text(
+        //             '업데이트: ${_formatTime(_lastConnectionUpdate!)}',
+        //             style: TextStyle(
+        //               color: Colors.white54,
+        //               fontSize: 8,
+        //             ),
+        //           ),
+        //       ],
+        //     ),
+        //   ),
+        // ),
         // 내 화면 (왼쪽 상단, 빨간 테두리) - 4:3 비율로 수정
         Positioned(
           top: 50,
