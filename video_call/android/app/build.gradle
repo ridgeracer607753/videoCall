@@ -49,6 +49,11 @@ android {
         targetSdkVersion flutter.targetSdkVersion
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
+        
+        // 64비트 아키텍처만 지원
+        ndk {
+            abiFilters 'arm64-v8a'
+        }
     }
 
     buildTypes {
